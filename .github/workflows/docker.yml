@@ -2,7 +2,7 @@ name: Docker
 
 on:
   push:
-    branches: [main, master, 'feat/*']
+    branches: [main, master, 'feat/*', 'fix/*']
     tags: ['v*']
 
 env:
