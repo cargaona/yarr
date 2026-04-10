@@ -610,10 +610,10 @@ func (s *Storage) GetRankedItems(filter ItemFilter, limit int, offset int) ([]Ra
 		cond = append(cond, "i.status = ?")
 		args = append(args, *filter.Status)
 	} else {
-		// By default, exclude read articles — they've already been consumed.
-		// Starred articles (status=2) are kept: they're high-value and users may re-read them.
-		cond = append(cond, "i.status != ?")
-		args = append(args, READ)
+		// By default, only include unread articles.
+		// Starred articles are excluded from For You ranking — they're available in the dedicated Starred tab.
+		cond = append(cond, "i.status = ?")
+		args = append(args, UNREAD)
 	}
 
 	where := ""
