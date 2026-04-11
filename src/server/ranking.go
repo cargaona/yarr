@@ -116,6 +116,9 @@ func (s *Server) handleRankedItems(c *router.Context) {
 		statusValue := storage.StatusValues[status]
 		filter.Status = &statusValue
 	}
+	if tag := query.Get("tag"); tag != "" {
+		filter.Tag = &tag
+	}
 
 	sortBy := query.Get("sort")
 	if sortBy == "" {

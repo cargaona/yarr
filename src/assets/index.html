@@ -276,11 +276,10 @@
                 </button>
                 <button v-if="feedViewMode == 'for-you'" 
                         class="btn btn-default btn-sm" 
-                        @click="toggleRankedSort()" 
-                        :class="{active: rankedSortBy == 'score'}"
+                        @click="cycleTopicSort()" 
                         style="flex: 1; font-size: 0.75rem; padding: 0.25rem 0.5rem;"
-                        :title="rankedSortBy == 'score' ? 'Sorted by ranking score' : 'Sorted by time'">
-                    {{ rankedSortBy == 'score' ? 'Rank' : 'Time' }}
+                        title="Sort topics (Alphabetic / Ranked / Most Articles)">
+                    {{ topicSortLabel }}
                 </button>
                 <button v-if="feedViewMode == 'for-you'" 
                         class="btn btn-default btn-sm" 
@@ -319,11 +318,11 @@
                     <span class="icon">{% inline "check.svg" %}</span>
                 </button>
                 <button class="toolbar-item ml-1"
-                        id="btn-density-toggle"
-                        :class="{active: densityCompact}"
-                        title="Compact view"
-                        @click="toggleDensity()">
-                    <span class="icon">{% inline "sliders.svg" %}</span>
+                        v-if="feedViewMode == 'for-you'"
+                        :class="{active: articleSortMode == 'ranked'}"
+                        :title="articleSortMode == 'ranked' ? 'Articles sorted by ranking' : 'Articles sorted by time'"
+                        @click="toggleArticleSort()">
+                    <span class="text-small" style="font-size: 0.7rem; font-weight: 600;">{{ articleSortMode == 'ranked' ? 'Ranked' : 'Time' }}</span>
                 </button>
 
                 <button class="btn btn-link toolbar-item px-2 ml-2" v-if="!current.type" disabled>
@@ -407,7 +406,7 @@
                     </button>
                 </dropdown>
             </div>
-            <div id="item-list-scroll" class="p-2 overflow-auto scroll-touch border-top flex-grow-1" :class="{'density-compact': densityCompact}" v-scroll="loadMoreItems" ref="itemlist">
+            <div id="item-list-scroll" class="p-2 overflow-auto scroll-touch border-top flex-grow-1" v-scroll="loadMoreItems" ref="itemlist">
                 <label v-for="item in items" :key="item.id"
                        class="selectgroup">
                     <input type="radio" name="item" :value="item.id" v-model="itemSelected">

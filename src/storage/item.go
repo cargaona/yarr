@@ -91,6 +91,7 @@ type ItemFilter struct {
 	MaxID    *int64
 	Before   *time.Time
 	Since    *time.Time
+	Tag      *string
 }
 
 type MarkFilter struct {

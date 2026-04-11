@@ -632,6 +632,11 @@ func (s *Storage) GetRankedItems(filter ItemFilter, limit int, offset int, sortB
 	// Step 7: Fetch candidate items (recent, with filters)
 	cond := make([]string, 0)
 	args := make([]interface{}, 0)
+
+	if filter.Tag != nil {
+		cond = append(cond, "EXISTS (SELECT 1 FROM ai_article_tags at WHERE at.url = i.link AND at.tag = ?)")
+		args = append(args, *filter.Tag)
+	}
 	if filter.FolderID != nil {
 		cond = append(cond, "i.feed_id IN (SELECT id FROM feeds WHERE folder_id = ?)")
 		args = append(args, *filter.FolderID)
