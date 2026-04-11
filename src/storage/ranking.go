@@ -394,8 +394,8 @@ func (s *Storage) GetPreferenceStats() (PreferenceStats, error) {
 		JOIN items i ON i.id = r.item_id
 		JOIN ai_article_tags at ON at.url = i.link
 		GROUP BY at.tag
+		HAVING score != 0
 		ORDER BY score DESC
-		LIMIT 5
 	`)
 	if err == nil {
 		defer topicRows.Close()

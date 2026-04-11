@@ -225,6 +225,10 @@ var vm = new Vue({
   mounted: function() {
     if (this.aiEnabled) {
       this.checkTaskStatus()
+      // Load ranking stats if starting in For You mode
+      if (this.feedViewMode === 'for-you') {
+        this.loadRankingStats()
+      }
     }
   },
   data: function() {
@@ -301,7 +305,6 @@ var vm = new Vue({
 
       // Feed view mode (for-you or legacy)
       'feedViewMode': 'legacy',
-      'rankedSortBy': 'score',
 
       // Time cycling filter
       'timeCycleOptions': ['', '1', '2', '3', '7', '14', '30'],
@@ -634,7 +637,7 @@ var vm = new Vue({
           if (parts[0] == 'folder') rankedQuery.folder_id = parts[1]
         }
         rankedQuery.page = vm.rankedPage
-        if (this.rankedSortBy === 'time') {
+        if (this.articleSortMode === 'time') {
           rankedQuery.sort = 'time'
         }
         this.loading.items = true
@@ -922,6 +925,10 @@ var vm = new Vue({
     loadRankingStats: function() {
       api.ranking.preferences().then(function(stats) {
         vm.rankingStats = stats
+        // Re-run topic sort if in ranked mode
+        if (vm.topicSortMode === 'ranked' && vm.topicClusters.length > 0) {
+          vm.sortTopics()
+        }
       }).catch(function() {
         vm.rankingStats = null
       })
@@ -1141,6 +1148,10 @@ var vm = new Vue({
         if (!this.topicsLoaded) {
           this.loadTopics()
         }
+        // Load ranking stats for topic affinity sorting
+        if (window.app.aiEnabled && !this.rankingStats) {
+          this.loadRankingStats()
+        }
       } else {
         // Switch to Legacy mode
         this.feedViewMode = 'legacy'
@@ -1150,10 +1161,6 @@ var vm = new Vue({
         this.timeCycleIndex = 0
         this.topicTimeFilter = ''
       }
-    },
-    toggleRankedSort: function() {
-      this.rankedSortBy = this.rankedSortBy === 'score' ? 'time' : 'score'
-      this.refreshItems(false)
     },
     toggleUnreadFilter: function() {
       // In For You mode, toggle between ranked and unread
@@ -1225,9 +1232,25 @@ var vm = new Vue({
           return b.article_count - a.article_count
         })
       } else if (mode === 'ranked') {
-        // For ranked mode, we'd ideally use topic affinity scores
-        // For now, use count as a proxy (can be enhanced with backend support)
+        // Build lookup map of topic affinity scores
+        var topicScores = {}
+        if (vm.rankingStats && vm.rankingStats.top_topics) {
+          vm.rankingStats.top_topics.forEach(function(ta) {
+            topicScores[ta.topic] = ta.score
+          })
+        }
+        
+        // Sort by affinity score (highest first), fallback to count
         clusters.sort(function(a, b) {
+          var scoreA = topicScores[a.label] || 0
+          var scoreB = topicScores[b.label] || 0
+          
+          // If scores differ, sort by score (descending)
+          if (scoreA !== scoreB) {
+            return scoreB - scoreA
+          }
+          
+          // If both have same score (including 0), sort by article count
           return b.article_count - a.article_count
         })
       }
