@@ -90,6 +90,8 @@ type ItemFilter struct {
 	SinceID  *int64
 	MaxID    *int64
 	Before   *time.Time
+	Since    *time.Time
+	Tag      *string
 }
 
 type MarkFilter struct {
@@ -216,6 +218,10 @@ func listQueryPredicate(filter ItemFilter, newestFirst bool) (string, []interfac
 	if filter.Before != nil {
 		cond = append(cond, "i.date < ?")
 		args = append(args, filter.Before)
+	}
+	if filter.Since != nil {
+		cond = append(cond, "i.date >= ?")
+		args = append(args, filter.Since)
 	}
 
 	predicate := "1"

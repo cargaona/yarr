@@ -24,25 +24,19 @@
             <drag :width="feedListWidth" @resize="resizeFeedList"></drag>
             <div class="p-2 toolbar d-flex align-items-center">
                 <div class="icon mx-2">{% inline "anchor.svg" %}</div>
-                <div class="flex-grow-1"></div>
                 <button class="toolbar-item ml-1"
-                        :class="{active: filterSelected == 'ranked'}"
-                        :aria-pressed="filterSelected == 'ranked'"
-                        title="For You"
-                        @click="filterSelected = 'ranked'">
-                    <span class="icon">{% inline "zap.svg" %}</span>
+                        :class="{active: feedViewMode == 'for-you'}"
+                        :aria-pressed="feedViewMode == 'for-you'"
+                        title="Feed View"
+                        @click="toggleFeedViewMode()">
+                    <span class="icon">{% inline "assorted.svg" %}</span>
                 </button>
-                <button class="toolbar-item"
-                        v-if="filterSelected == 'ranked'"
-                        title="How ranking works"
-                        @click="showSettings('ranking-help')">
-                    <span class="icon">{% inline "help-circle.svg" %}</span>
-                </button>
+                <div class="flex-grow-1"></div>
                 <button class="toolbar-item ml-1"
                         :class="{active: filterSelected == 'unread'}"
                         :aria-pressed="filterSelected == 'unread'"
                         title="Unread"
-                        @click="filterSelected = 'unread'">
+                        @click="toggleUnreadFilter()">
                     <span class="icon">{% inline "circle-full.svg" %}</span>
                 </button>
                 <button class="toolbar-item mx-1"
@@ -53,13 +47,6 @@
                     <span class="icon">{% inline "star-full.svg" %}</span>
                 </button>
                 <button class="toolbar-item mr-1"
-                        :class="{active: filterSelected == ''}"
-                        :aria-pressed="filterSelected == ''"
-                        title="All"
-                        @click="filterSelected = ''">
-                    <span class="icon">{% inline "assorted.svg" %}</span>
-                </button>
-                <button class="toolbar-item"
                         :class="{active: filterSelected == 'archived'}"
                         :aria-pressed="filterSelected == 'archived'"
                         title="Archived"
@@ -67,7 +54,7 @@
                     <span class="icon">{% inline "archive.svg" %}</span>
                 </button>
                 <button class="toolbar-item ml-1"
-                        v-if="aiEnabled"
+                        v-if="false"
                         id="btn-topics"
                         :class="{active: topicsActive}"
                         title="Topics"
@@ -76,14 +63,14 @@
                 </button>
                 <div class="flex-grow-1"></div>
                 <button class="toolbar-item ml-1"
-                        v-if="aiEnabled"
+                        v-if="false"
                         id="btn-briefing"
                         title="AI Briefing"
                         @click="openBriefing()">
                     <span class="icon">{% inline "zap.svg" %}</span>
                 </button>
                 <button class="toolbar-item"
-                        v-if="aiEnabled"
+                        v-if="false"
                         id="btn-chat"
                         title="AI Chat"
                         @click="openChat()">
@@ -174,13 +161,11 @@
                     </button>
                 </dropdown>
             </div>
-            <div id="feed-list-scroll" v-show="!topicsActive" class="p-2 overflow-auto scroll-touch border-top flex-grow-1">
+            <div id="feed-list-scroll" v-show="feedViewMode == 'legacy'" class="p-2 overflow-auto scroll-touch border-top flex-grow-1">
                 <label class="selectgroup">
                     <input type="radio" name="feed" value="" v-model="feedSelected">
                     <div class="selectgroup-label d-flex align-items-center w-100">
                         <span class="icon mr-2">{% inline "layers.svg" %}</span>
-                        <span class="flex-fill text-left text-truncate" v-if="filterSelected=='ranked'">For You</span>
-                        <span class="flex-fill text-left text-truncate" v-if="filterSelected=='unread'">All Unread</span>
                         <span class="flex-fill text-left text-truncate" v-if="filterSelected=='starred'">All Starred</span>
                         <span class="flex-fill text-left text-truncate" v-if="filterSelected=='archived'">All Archived</span>
                         <span class="flex-fill text-left text-truncate" v-if="filterSelected==''">All Feeds</span>
@@ -229,34 +214,18 @@
                 </div>
             </div>
             <!-- topics view (replaces feed list when active) -->
-            <div id="topics-view" v-if="aiEnabled && topicsActive" v-cloak>
+            <div id="topics-view" v-if="feedViewMode == 'for-you'" v-cloak>
                 <div v-if="topicsLoading" class="p-3 text-center text-muted">
                     <span class="icon loading"></span>
                 </div>
                 <div v-else>
-                    <div class="topics-toolbar">
-                        <button class="btn btn-default btn-sm" @click="reindexArticles($event)" title="Index articles for AI search">
-                            Reindex ({{ topicsHealth.chroma_docs || 0 }})
-                        </button>
-                        <button class="btn btn-default btn-sm" @click="rebuildTopics($event)" title="Rebuild topic clusters">
-                            Rebuild Topics
-                        </button>
+                    <div class="topic-entry" 
+                         :class="{active: !selectedTopic && filterSelected == 'ranked'}"
+                         @click="viewRankedFeed()"
+                         style="font-weight: 600; border-bottom: 1px solid rgba(0,0,0,0.1);">
+                        Feed
                     </div>
                     <div class="topics-filters">
-                        <select v-model="topicStatusFilter" class="form-control form-control-sm">
-                            <option value="-1">All statuses</option>
-                            <option value="0">Unread</option>
-                            <option value="2">Starred</option>
-                        </select>
-                        <select v-model="topicTimeFilter" class="form-control form-control-sm">
-                            <option value="">Any time</option>
-                            <option value="1">Last day</option>
-                            <option value="7">Last week</option>
-                            <option value="14">Last 2 weeks</option>
-                            <option value="30">Last month</option>
-                            <option value="custom">Custom date</option>
-                        </select>
-                        <input v-if="topicTimeFilter === 'custom'" v-model="topicCustomSince" type="date" class="form-control form-control-sm" />
                         <input v-model="topicSearchQuery" type="text" class="form-control form-control-sm" placeholder="Filter topics" />
                         <label class="topics-hide-small">
                             <input type="checkbox" v-model="topicHideSmall" />
@@ -294,6 +263,38 @@
                 <span class="icon loading mx-2"></span>
                 <span class="text-truncate cursor-default noselect">Refreshing ({{ loading.feeds }} left)</span>
             </div>
+            <!-- bottom toolbar -->
+            <div class="p-2 toolbar d-flex align-items-center border-top flex-shrink-0" style="gap: 4px;">
+                <!-- For You mode controls -->
+                <button v-if="feedViewMode == 'for-you'" 
+                        class="btn btn-default btn-sm" 
+                        @click="reindexArticles($event)" 
+                        style="flex: 1; font-size: 0.75rem; padding: 0.25rem 0.5rem;"
+                        title="Index articles for AI search">
+                    Reindex
+                </button>
+                <button v-if="feedViewMode == 'for-you'" 
+                        class="btn btn-default btn-sm" 
+                        @click="rebuildTopics($event)" 
+                        style="flex: 1; font-size: 0.75rem; padding: 0.25rem 0.5rem;"
+                        title="Rebuild topic clusters">
+                    Rebuild
+                </button>
+                <button v-if="feedViewMode == 'for-you'" 
+                        class="btn btn-default btn-sm" 
+                        @click="showSettings('ranking-help')"
+                        style="flex: 0 0 auto; font-size: 0.75rem; padding: 0.25rem 0.5rem;"
+                        title="How ranking works">
+                    <span class="icon" style="width: 0.9rem; height: 0.9rem;">{% inline "help-circle.svg" %}</span>
+                </button>
+                <!-- Time cycling button (appears in both modes) -->
+                <button class="btn btn-default btn-sm" 
+                        @click="cycleTimeFilter()" 
+                        style="flex: 1; font-size: 0.75rem; padding: 0.25rem 0.5rem;"
+                        title="Cycle time range">
+                    {{ timeCycleLabel }}
+                </button>
+            </div>
         </div>
         <!-- item list -->
         <div id="col-item-list" class="vh-100 position-relative d-flex flex-column border-right flex-shrink-0" :style="{width: itemListWidth+'px'}">
@@ -314,13 +315,6 @@
                         v-if="filterSelected == 'unread'"
                         title="Mark All Read">
                     <span class="icon">{% inline "check.svg" %}</span>
-                </button>
-                <button class="toolbar-item ml-1"
-                        id="btn-density-toggle"
-                        :class="{active: densityCompact}"
-                        title="Compact view"
-                        @click="toggleDensity()">
-                    <span class="icon">{% inline "sliders.svg" %}</span>
                 </button>
 
                 <button class="btn btn-link toolbar-item px-2 ml-2" v-if="!current.type" disabled>
@@ -404,7 +398,7 @@
                     </button>
                 </dropdown>
             </div>
-            <div id="item-list-scroll" class="p-2 overflow-auto scroll-touch border-top flex-grow-1" :class="{'density-compact': densityCompact}" v-scroll="loadMoreItems" ref="itemlist">
+            <div id="item-list-scroll" class="p-2 overflow-auto scroll-touch border-top flex-grow-1" v-scroll="loadMoreItems" ref="itemlist">
                 <label v-for="item in items" :key="item.id"
                        class="selectgroup">
                     <input type="radio" name="item" :value="item.id" v-model="itemSelected">
@@ -417,11 +411,11 @@
                             <small class="flex-fill text-truncate mr-1">
                                 {{ item._feedName || (feedsById[item.feed_id] || {}).title }}
                             </small>
-                            <small class="ranking-score flex-shrink-0 ml-1" v-if="filterSelected == 'ranked' && item.score">{{ Math.round(item.score) }}</small>
+                            <small class="ranking-score flex-shrink-0 ml-1" v-if="feedViewMode == 'for-you' && item.score">{{ Math.round(item.score) }}</small>
                             <small class="flex-shrink-0"><relative-time v-bind:title="formatDate(item.date)" :val="item.date"/></small>
                         </div>
                         <div>{{ item.title || 'untitled' }}
-                            <small class="relevance-reason" v-if="filterSelected == 'ranked' && item.relevance_reason">{{ item.relevance_reason }}</small>
+                            <small class="relevance-reason" v-if="feedViewMode == 'for-you' && item.relevance_reason">{{ item.relevance_reason }}</small>
                         </div>
                     </div>
                 </label>
@@ -569,8 +563,9 @@
                 <p class="cursor-default"><b>Keyboard Shortcuts</b></p>
 
                 <table class="table table-borderless table-sm table-compact m-0">
-                    <tr><td><kbd>1</kbd> <kbd>2</kbd> <kbd>3</kbd> <kbd>4</kbd></td>
-                                                            <td>show unread / starred / all / for you</td></tr>
+                    <tr><td><kbd>1</kbd></td>               <td>toggle feed view (For You ⇄ Legacy)</td></tr>
+                    <tr><td><kbd>2</kbd></td>               <td>show starred</td></tr>
+                    <tr><td><kbd>3</kbd></td>               <td>show archived</td></tr>
                     <tr><td><kbd>/</kbd></td>               <td>focus the search bar</td></tr>
 
                     <tr><td colspan=2>&nbsp;</td></tr>

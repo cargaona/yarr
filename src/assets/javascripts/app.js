@@ -225,6 +225,10 @@ var vm = new Vue({
   mounted: function() {
     if (this.aiEnabled) {
       this.checkTaskStatus()
+      // Load ranking stats if starting in For You mode
+      if (this.feedViewMode === 'for-you') {
+        this.loadRankingStats()
+      }
     }
   },
   data: function() {
@@ -298,6 +302,14 @@ var vm = new Vue({
 
       // Reader/focus mode
       'readerMode': false,
+
+      // Feed view mode (for-you or legacy)
+      'feedViewMode': 'legacy',
+
+      // Time cycling filter
+      'timeCycleOptions': ['', '1', '2', '3', '7', '14', '30'],
+      'timeCycleLabels': ['All', '1d', '2d', '3d', '1w', '2w', '1m'],
+      'timeCycleIndex': 0,
 
       // Topics/clusters
       'topicsActive': false,
@@ -394,6 +406,9 @@ var vm = new Vue({
         if (!query) return true
         return (tag.tag || '').toLowerCase().indexOf(query) !== -1
       }.bind(this))
+    },
+    timeCycleLabel: function() {
+      return this.timeCycleLabels[this.timeCycleIndex] || 'All'
     },
   },
   watch: {
@@ -524,6 +539,10 @@ var vm = new Vue({
       if (oldVal === undefined) return  // do nothing, initial setup
       api.settings.update({refresh_rate: newVal})
     },
+    'feedViewMode': function(newVal, oldVal) {
+      if (oldVal === undefined) return  // do nothing, initial setup
+      // Mode switching is handled by toggleFeedViewMode()
+    },
   },
   methods: {
     updateMetaTheme: function(theme) {
@@ -567,6 +586,19 @@ var vm = new Vue({
       }
       if (!this.itemSortNewestFirst) {
         query.oldest_first = true
+      }
+      // Add time filter if set
+      if (this.topicTimeFilter) {
+        var days = parseInt(this.topicTimeFilter, 10)
+        if (days > 0) {
+          var since = new Date()
+          since.setHours(0, 0, 0, 0)
+          since.setDate(since.getDate() - days)
+          var yyyy = since.getFullYear()
+          var mm = String(since.getMonth() + 1).padStart(2, '0')
+          var dd = String(since.getDate()).padStart(2, '0')
+          query.since = yyyy + '-' + mm + '-' + dd + ' 00:00:00'
+        }
       }
       return query
     },
@@ -882,6 +914,10 @@ var vm = new Vue({
     loadRankingStats: function() {
       api.ranking.preferences().then(function(stats) {
         vm.rankingStats = stats
+        // Re-run topic sort if in ranked mode
+        if (vm.topicSortMode === 'ranked' && vm.topicClusters.length > 0) {
+          vm.sortTopics()
+        }
       }).catch(function() {
         vm.rankingStats = null
       })
@@ -1090,6 +1126,61 @@ var vm = new Vue({
         this.loadTopics()
       }
     },
+    toggleFeedViewMode: function() {
+      if (this.feedViewMode === 'legacy') {
+        // Switch to For You mode
+        this.feedViewMode = 'for-you'
+        this.filterSelected = 'ranked'
+        // Set default time range to 1d (index 1, since 0 is "All")
+        this.timeCycleIndex = 1
+        this.topicTimeFilter = this.timeCycleOptions[1]
+        if (!this.topicsLoaded) {
+          this.loadTopics()
+        }
+        // Load ranking stats for topic affinity sorting
+        if (window.app.aiEnabled && !this.rankingStats) {
+          this.loadRankingStats()
+        }
+      } else {
+        // Switch to Legacy mode
+        this.feedViewMode = 'legacy'
+        this.filterSelected = ''
+        this.selectedTopic = null
+        // Reset time filter to "All" when entering Legacy mode
+        this.timeCycleIndex = 0
+        this.topicTimeFilter = ''
+      }
+    },
+    toggleUnreadFilter: function() {
+      // In For You mode, toggle between ranked and unread
+      if (this.feedViewMode === 'for-you') {
+        if (this.filterSelected === 'unread') {
+          this.filterSelected = 'ranked'
+        } else {
+          this.filterSelected = 'unread'
+        }
+      } else {
+        // In Legacy mode, toggle between unread and all
+        if (this.filterSelected === 'unread') {
+          this.filterSelected = ''
+        } else {
+          this.filterSelected = 'unread'
+        }
+      }
+    },
+    cycleTimeFilter: function() {
+      this.timeCycleIndex = (this.timeCycleIndex + 1) % this.timeCycleOptions.length
+      this.topicTimeFilter = this.timeCycleOptions[this.timeCycleIndex]
+      // Trigger refresh based on current mode
+      if (this.feedViewMode === 'for-you') {
+        if (this.selectedTopic) {
+          this.selectTopic(this.selectedTopic, true)
+        } else {
+          this.loadTopics()
+        }
+      }
+      this.refreshItems(false)
+    },
     topicSinceValue: function() {
       if (this.topicTimeFilter === 'custom') {
         if (!this.topicCustomSince) return ''
@@ -1110,6 +1201,14 @@ var vm = new Vue({
         status: this.topicStatusFilter,
         since: this.topicSinceValue(),
       }
+    },
+    sortTopics: function() {
+      // Always sort topics by article count (most to least)
+      var clusters = this.topicClusters.slice()
+      clusters.sort(function(a, b) {
+        return b.article_count - a.article_count
+      })
+      this.topicClusters = clusters
     },
     onTopicFilterChange: function() {
       if (!this.topicsActive) {
@@ -1133,6 +1232,7 @@ var vm = new Vue({
         var tagsResp = results[1]
         var healthResp = results[2]
         vm.topicClusters = clustersResp.clusters || []
+        vm.sortTopics()
         var clusterLabels = new Set(vm.topicClusters.map(function(c) { return c.label }))
         // tags not already covered by cluster labels
         var tags = Array.isArray(tagsResp) ? tagsResp : []
@@ -1154,6 +1254,8 @@ var vm = new Vue({
       this.items = []
       this.itemsHasMore = false
       this.feedSelected = 'topic:' + tag
+      
+      // Topics always show time-sorted articles (filtered by tag)
       api.ai.articles(tag, this.topicApiFilters()).then(function(articles) {
         var list = Array.isArray(articles) ? articles : []
         vm.items = list.map(function(a) {
@@ -1170,6 +1272,13 @@ var vm = new Vue({
         console.error('selectTopic error:', err)
         vm.items = []
       })
+    },
+    viewRankedFeed: function() {
+      this.selectedTopic = null
+      this.feedSelected = ''
+      this.filterSelected = 'ranked'
+      this.itemSelected = null
+      this.refreshItems(false)
     },
 
     // ── AI Task Status Polling ─────────────────────────────────────────────

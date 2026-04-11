@@ -394,8 +394,8 @@ func (s *Storage) GetPreferenceStats() (PreferenceStats, error) {
 		JOIN items i ON i.id = r.item_id
 		JOIN ai_article_tags at ON at.url = i.link
 		GROUP BY at.tag
+		HAVING score != 0
 		ORDER BY score DESC
-		LIMIT 5
 	`)
 	if err == nil {
 		defer topicRows.Close()
@@ -432,7 +432,7 @@ func decayWeight(ageDays float64) float64 {
 
 // GetRankedItems returns items scored by the personalized ranking algorithm.
 // Items are fetched from the last 30 days (or all if fewer), scored in Go, sorted, and paginated.
-func (s *Storage) GetRankedItems(filter ItemFilter, limit int, offset int) ([]RankedItem, bool, error) {
+func (s *Storage) GetRankedItems(filter ItemFilter, limit int, offset int, sortBy string) ([]RankedItem, bool, error) {
 	now := time.Now().UTC()
 
 	// Step 1: Compute feed affinity scores from reactions + stars
@@ -632,6 +632,11 @@ func (s *Storage) GetRankedItems(filter ItemFilter, limit int, offset int) ([]Ra
 	// Step 7: Fetch candidate items (recent, with filters)
 	cond := make([]string, 0)
 	args := make([]interface{}, 0)
+
+	if filter.Tag != nil {
+		cond = append(cond, "EXISTS (SELECT 1 FROM ai_article_tags at WHERE at.url = i.link AND at.tag = ?)")
+		args = append(args, *filter.Tag)
+	}
 	if filter.FolderID != nil {
 		cond = append(cond, "i.feed_id IN (SELECT id FROM feeds WHERE folder_id = ?)")
 		args = append(args, *filter.FolderID)
@@ -755,8 +760,8 @@ func (s *Storage) GetRankedItems(filter ItemFilter, limit int, offset int) ([]Ra
 		item.RelevanceReason = generateRelevanceReason(fa, topicAffinity, topics, keywordAffinity, c.keywords, feedReactionCount[item.FeedId])
 	}
 
-	// Step 9: Sort by score DESC, date DESC
-	sortCandidates(candidates)
+	// Step 9: Sort by score DESC, date DESC (or time DESC if sortBy == "time")
+	sortCandidates(candidates, sortBy)
 
 	// Step 10: Paginate
 	total := len(candidates)
@@ -792,12 +797,20 @@ func clamp(val, min, max float64) float64 {
 	return val
 }
 
-func sortCandidates(candidates []rankedCandidate) {
+func sortCandidates(candidates []rankedCandidate, sortBy string) {
 	// Simple insertion sort — stable and fine for <= 1000 items
 	for i := 1; i < len(candidates); i++ {
 		for j := i; j > 0; j-- {
 			a, b := candidates[j], candidates[j-1]
-			if a.item.Score > b.item.Score || (a.item.Score == b.item.Score && a.item.Date.After(b.item.Date)) {
+			var shouldSwap bool
+			if sortBy == "time" {
+				// Sort by date DESC (newer first)
+				shouldSwap = a.item.Date.After(b.item.Date)
+			} else {
+				// Sort by score DESC, then date DESC
+				shouldSwap = a.item.Score > b.item.Score || (a.item.Score == b.item.Score && a.item.Date.After(b.item.Date))
+			}
+			if shouldSwap {
 				candidates[j], candidates[j-1] = b, a
 			} else {
 				break
