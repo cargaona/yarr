@@ -219,6 +219,12 @@
                     <span class="icon loading"></span>
                 </div>
                 <div v-else>
+                    <div class="topic-entry" 
+                         :class="{active: !selectedTopic && filterSelected == 'ranked'}"
+                         @click="viewRankedFeed()"
+                         style="font-weight: 600; border-bottom: 1px solid rgba(0,0,0,0.1);">
+                        Feed
+                    </div>
                     <div class="topics-filters">
                         <input v-model="topicSearchQuery" type="text" class="form-control form-control-sm" placeholder="Filter topics" />
                         <label class="topics-hide-small">
@@ -276,13 +282,6 @@
                 </button>
                 <button v-if="feedViewMode == 'for-you'" 
                         class="btn btn-default btn-sm" 
-                        @click="cycleTopicSort()" 
-                        style="flex: 1; font-size: 0.75rem; padding: 0.25rem 0.5rem;"
-                        title="Sort topics (Alphabetic / Ranked / Most Articles)">
-                    {{ topicSortLabel }}
-                </button>
-                <button v-if="feedViewMode == 'for-you'" 
-                        class="btn btn-default btn-sm" 
                         @click="showSettings('ranking-help')"
                         style="flex: 0 0 auto; font-size: 0.75rem; padding: 0.25rem 0.5rem;"
                         title="How ranking works">
@@ -316,13 +315,6 @@
                         v-if="filterSelected == 'unread'"
                         title="Mark All Read">
                     <span class="icon">{% inline "check.svg" %}</span>
-                </button>
-                <button class="toolbar-item ml-1"
-                        v-if="feedViewMode == 'for-you'"
-                        :class="{active: articleSortMode == 'ranked'}"
-                        :title="articleSortMode == 'ranked' ? 'Articles sorted by ranking' : 'Articles sorted by time'"
-                        @click="toggleArticleSort()">
-                    <span class="text-small" style="font-size: 0.7rem; font-weight: 600;">{{ articleSortMode == 'ranked' ? 'Ranked' : 'Time' }}</span>
                 </button>
 
                 <button class="btn btn-link toolbar-item px-2 ml-2" v-if="!current.type" disabled>

@@ -311,11 +311,6 @@ var vm = new Vue({
       'timeCycleLabels': ['All', '1d', '2d', '3d', '1w', '2w', '1m'],
       'timeCycleIndex': 0,
 
-      // Topic and article sorting
-      'topicSortMode': 'alphabetic',
-      'topicSortLabels': {alphabetic: 'A-Z', ranked: 'Ranked', count: 'Most'},
-      'articleSortMode': 'ranked',
-
       // Topics/clusters
       'topicsActive': false,
       'topicsLoading': false,
@@ -414,9 +409,6 @@ var vm = new Vue({
     },
     timeCycleLabel: function() {
       return this.timeCycleLabels[this.timeCycleIndex] || 'All'
-    },
-    topicSortLabel: function() {
-      return this.topicSortLabels[this.topicSortMode] || 'A-Z'
     },
   },
   watch: {
@@ -637,9 +629,6 @@ var vm = new Vue({
           if (parts[0] == 'folder') rankedQuery.folder_id = parts[1]
         }
         rankedQuery.page = vm.rankedPage
-        if (this.articleSortMode === 'time') {
-          rankedQuery.sort = 'time'
-        }
         this.loading.items = true
         return api.ranking.list(rankedQuery).then(function(data) {
           if (loadMore) {
@@ -1213,57 +1202,13 @@ var vm = new Vue({
         since: this.topicSinceValue(),
       }
     },
-    cycleTopicSort: function() {
-      var modes = ['alphabetic', 'ranked', 'count']
-      var currentIndex = modes.indexOf(this.topicSortMode)
-      this.topicSortMode = modes[(currentIndex + 1) % modes.length]
-      this.sortTopics()
-    },
     sortTopics: function() {
+      // Always sort topics by article count (most to least)
       var clusters = this.topicClusters.slice()
-      var mode = this.topicSortMode
-      
-      if (mode === 'alphabetic') {
-        clusters.sort(function(a, b) {
-          return a.label.toLowerCase().localeCompare(b.label.toLowerCase())
-        })
-      } else if (mode === 'count') {
-        clusters.sort(function(a, b) {
-          return b.article_count - a.article_count
-        })
-      } else if (mode === 'ranked') {
-        // Build lookup map of topic affinity scores
-        var topicScores = {}
-        if (vm.rankingStats && vm.rankingStats.top_topics) {
-          vm.rankingStats.top_topics.forEach(function(ta) {
-            topicScores[ta.topic] = ta.score
-          })
-        }
-        
-        // Sort by affinity score (highest first), fallback to count
-        clusters.sort(function(a, b) {
-          var scoreA = topicScores[a.label] || 0
-          var scoreB = topicScores[b.label] || 0
-          
-          // If scores differ, sort by score (descending)
-          if (scoreA !== scoreB) {
-            return scoreB - scoreA
-          }
-          
-          // If both have same score (including 0), sort by article count
-          return b.article_count - a.article_count
-        })
-      }
-      
+      clusters.sort(function(a, b) {
+        return b.article_count - a.article_count
+      })
       this.topicClusters = clusters
-    },
-    toggleArticleSort: function() {
-      this.articleSortMode = this.articleSortMode === 'ranked' ? 'time' : 'ranked'
-      if (this.selectedTopic) {
-        this.selectTopic(this.selectedTopic, true)
-      } else if (this.feedViewMode === 'for-you') {
-        this.refreshItems(false)
-      }
     },
     onTopicFilterChange: function() {
       if (!this.topicsActive) {
@@ -1310,40 +1255,30 @@ var vm = new Vue({
       this.itemsHasMore = false
       this.feedSelected = 'topic:' + tag
       
-      if (this.articleSortMode === 'ranked') {
-        // Use ranking endpoint with tag filter
-        var query = {tag: tag, sort: 'score'}
-        var filters = this.topicApiFilters()
-        if (filters.status && filters.status !== '-1') {
-          query.status = filters.status === '0' ? 'unread' : (filters.status === '1' ? 'read' : 'starred')
-        }
-        api.ranking.list(query).then(function(resp) {
-          var list = resp.list || []
-          vm.items = list
-          vm.itemsHasMore = resp.has_more || false
-        }).catch(function(err) {
-          console.error('selectTopic ranked error:', err)
-          vm.items = []
+      // Topics always show time-sorted articles (filtered by tag)
+      api.ai.articles(tag, this.topicApiFilters()).then(function(articles) {
+        var list = Array.isArray(articles) ? articles : []
+        vm.items = list.map(function(a) {
+          return {
+            id: a.id,
+            title: a.title || a.url || 'untitled',
+            date: a.published,
+            feed_id: null,
+            status: a.status || 'read',
+            _feedName: a.feed_name || '',
+          }
         })
-      } else {
-        // Use articles endpoint (time-sorted)
-        api.ai.articles(tag, this.topicApiFilters()).then(function(articles) {
-          var list = Array.isArray(articles) ? articles : []
-          vm.items = list.map(function(a) {
-            return {
-              id: a.id,
-              title: a.title || a.url || 'untitled',
-              date: a.published,
-              feed_id: null,
-              status: a.status || 'read',
-              _feedName: a.feed_name || '',
-            }
-          })
-        }).catch(function(err) {
-          console.error('selectTopic error:', err)
-          vm.items = []
-        })
-      }
+      }).catch(function(err) {
+        console.error('selectTopic error:', err)
+        vm.items = []
+      })
+    },
+    viewRankedFeed: function() {
+      this.selectedTopic = null
+      this.feedSelected = ''
+      this.filterSelected = 'ranked'
+      this.itemSelected = null
+      this.refreshItems(false)
     },
 
     // ── AI Task Status Polling ─────────────────────────────────────────────
