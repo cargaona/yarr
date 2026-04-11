@@ -117,7 +117,12 @@ func (s *Server) handleRankedItems(c *router.Context) {
 		filter.Status = &statusValue
 	}
 
-	items, hasMore, err := s.db.GetRankedItems(filter, limit, offset)
+	sortBy := query.Get("sort")
+	if sortBy == "" {
+		sortBy = "score"
+	}
+
+	items, hasMore, err := s.db.GetRankedItems(filter, limit, offset, sortBy)
 	if err != nil {
 		log.Print("GetRankedItems error:", err)
 		c.Out.WriteHeader(http.StatusInternalServerError)

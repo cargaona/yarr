@@ -10,6 +10,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/nkanaev/yarr/src/assets"
 	"github.com/nkanaev/yarr/src/content/htmlutil"
@@ -399,6 +400,12 @@ func (s *Server) handleItemList(c *router.Context) {
 		}
 		if search := query.Get("search"); len(search) != 0 {
 			filter.Search = &search
+		}
+		if since := query.Get("since"); len(since) != 0 {
+			sinceTime, err := time.Parse("2006-01-02 15:04:05", since)
+			if err == nil {
+				filter.Since = &sinceTime
+			}
 		}
 		newestFirst := query.Get("oldest_first") != "true"
 

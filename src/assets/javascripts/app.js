@@ -299,6 +299,15 @@ var vm = new Vue({
       // Reader/focus mode
       'readerMode': false,
 
+      // Feed view mode (for-you or legacy)
+      'feedViewMode': 'legacy',
+      'rankedSortBy': 'score',
+
+      // Time cycling filter
+      'timeCycleOptions': ['', '1', '2', '3', '7', '14', '30'],
+      'timeCycleLabels': ['All', '1d', '2d', '3d', '1w', '2w', '1m'],
+      'timeCycleIndex': 0,
+
       // Topics/clusters
       'topicsActive': false,
       'topicsLoading': false,
@@ -394,6 +403,9 @@ var vm = new Vue({
         if (!query) return true
         return (tag.tag || '').toLowerCase().indexOf(query) !== -1
       }.bind(this))
+    },
+    timeCycleLabel: function() {
+      return this.timeCycleLabels[this.timeCycleIndex] || 'All'
     },
   },
   watch: {
@@ -524,6 +536,10 @@ var vm = new Vue({
       if (oldVal === undefined) return  // do nothing, initial setup
       api.settings.update({refresh_rate: newVal})
     },
+    'feedViewMode': function(newVal, oldVal) {
+      if (oldVal === undefined) return  // do nothing, initial setup
+      // Mode switching is handled by toggleFeedViewMode()
+    },
   },
   methods: {
     updateMetaTheme: function(theme) {
@@ -568,6 +584,19 @@ var vm = new Vue({
       if (!this.itemSortNewestFirst) {
         query.oldest_first = true
       }
+      // Add time filter if set
+      if (this.topicTimeFilter) {
+        var days = parseInt(this.topicTimeFilter, 10)
+        if (days > 0) {
+          var since = new Date()
+          since.setHours(0, 0, 0, 0)
+          since.setDate(since.getDate() - days)
+          var yyyy = since.getFullYear()
+          var mm = String(since.getMonth() + 1).padStart(2, '0')
+          var dd = String(since.getDate()).padStart(2, '0')
+          query.since = yyyy + '-' + mm + '-' + dd + ' 00:00:00'
+        }
+      }
       return query
     },
     refreshFeeds: function() {
@@ -597,6 +626,9 @@ var vm = new Vue({
           if (parts[0] == 'folder') rankedQuery.folder_id = parts[1]
         }
         rankedQuery.page = vm.rankedPage
+        if (this.rankedSortBy === 'time') {
+          rankedQuery.sort = 'time'
+        }
         this.loading.items = true
         return api.ranking.list(rankedQuery).then(function(data) {
           if (loadMore) {
@@ -1089,6 +1121,61 @@ var vm = new Vue({
       if (this.topicsActive && !this.topicsLoaded) {
         this.loadTopics()
       }
+    },
+    toggleFeedViewMode: function() {
+      if (this.feedViewMode === 'legacy') {
+        // Switch to For You mode
+        this.feedViewMode = 'for-you'
+        this.filterSelected = 'ranked'
+        // Set default time range to 1d (index 1, since 0 is "All")
+        this.timeCycleIndex = 1
+        this.topicTimeFilter = this.timeCycleOptions[1]
+        if (!this.topicsLoaded) {
+          this.loadTopics()
+        }
+      } else {
+        // Switch to Legacy mode
+        this.feedViewMode = 'legacy'
+        this.filterSelected = ''
+        this.selectedTopic = null
+        // Reset time filter to "All" when entering Legacy mode
+        this.timeCycleIndex = 0
+        this.topicTimeFilter = ''
+      }
+    },
+    toggleRankedSort: function() {
+      this.rankedSortBy = this.rankedSortBy === 'score' ? 'time' : 'score'
+      this.refreshItems(false)
+    },
+    toggleUnreadFilter: function() {
+      // In For You mode, toggle between ranked and unread
+      if (this.feedViewMode === 'for-you') {
+        if (this.filterSelected === 'unread') {
+          this.filterSelected = 'ranked'
+        } else {
+          this.filterSelected = 'unread'
+        }
+      } else {
+        // In Legacy mode, toggle between unread and all
+        if (this.filterSelected === 'unread') {
+          this.filterSelected = ''
+        } else {
+          this.filterSelected = 'unread'
+        }
+      }
+    },
+    cycleTimeFilter: function() {
+      this.timeCycleIndex = (this.timeCycleIndex + 1) % this.timeCycleOptions.length
+      this.topicTimeFilter = this.timeCycleOptions[this.timeCycleIndex]
+      // Trigger refresh based on current mode
+      if (this.feedViewMode === 'for-you') {
+        if (this.selectedTopic) {
+          this.selectTopic(this.selectedTopic, true)
+        } else {
+          this.loadTopics()
+        }
+      }
+      this.refreshItems(false)
     },
     topicSinceValue: function() {
       if (this.topicTimeFilter === 'custom') {

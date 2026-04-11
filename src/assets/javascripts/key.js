@@ -63,23 +63,20 @@ var shortcutFunctions = {
   closeItem: function () {
     vm.itemSelected = null
   },
-  showAll() {
-    vm.filterSelected = ''
-  },
-  showUnread() {
-    vm.filterSelected = 'unread'
-  },
   showStarred() {
     vm.filterSelected = 'starred'
+  },
+  showArchived() {
+    vm.filterSelected = 'archived'
+  },
+  toggleFeedView() {
+    vm.toggleFeedViewMode()
   },
   likeItem() {
     vm.toggleReaction('like')
   },
   dislikeItem() {
     vm.toggleReaction('dislike')
-  },
-  showRanked() {
-    vm.filterSelected = 'ranked'
   },
 }
 
@@ -98,10 +95,9 @@ var keybindings = {
   "f": shortcutFunctions.scrollForward,
   "b": shortcutFunctions.scrollBackward,
   "q": shortcutFunctions.closeItem,
-  "1": shortcutFunctions.showUnread,
+  "1": shortcutFunctions.toggleFeedView,
   "2": shortcutFunctions.showStarred,
-  "3": shortcutFunctions.showAll,
-  "4": shortcutFunctions.showRanked,
+  "3": shortcutFunctions.showArchived,
   "+": shortcutFunctions.likeItem,
   "=": shortcutFunctions.likeItem,
   "-": shortcutFunctions.dislikeItem,
@@ -121,10 +117,9 @@ var codebindings = {
   "KeyF": shortcutFunctions.scrollForward,
   "KeyB": shortcutFunctions.scrollBackward,
   "KeyQ": shortcutFunctions.closeItem,
-  "Digit1": shortcutFunctions.showUnread,
+  "Digit1": shortcutFunctions.toggleFeedView,
   "Digit2": shortcutFunctions.showStarred,
-  "Digit3": shortcutFunctions.showAll,
-  "Digit4": shortcutFunctions.showRanked,
+  "Digit3": shortcutFunctions.showArchived,
   "Equal": shortcutFunctions.likeItem,
   "Minus": shortcutFunctions.dislikeItem,
 }
